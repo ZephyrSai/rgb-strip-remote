@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0b0d12" />
+<title>RGB Strip Remote — Web Bluetooth</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --card: #161a23;
+    --card-2: #1d2230;
+    --line: #2a3142;
+    --text: #e7ebf3;
+    --muted: #97a0b5;
+    --accent: #6ea8fe;
+    --good: #38d39f;
+    --bad: #ff6b6b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -10%, #1a2030, var(--bg));
+    color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    padding: 18px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px;
+  }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
+  h1 small { color: var(--muted); font-weight: 400; font-size: 12px; display:block; margin-top:2px;}
+  .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 10px var(--bad); }
+  .dot.on { background: var(--good); box-shadow: 0 0 10px var(--good); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row + .row { margin-top: 12px; }
+  label.field { display: block; }
+  label.field span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+  button {
+    appearance: none; border: 1px solid var(--line); background: var(--card-2); color: var(--text);
+    padding: 10px 14px; border-radius: 10px; font-size: 14px; cursor: pointer; transition: .12s;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #07101f; border-color: transparent; font-weight: 600; }
+  button.danger { color: var(--bad); }
+  button.good { color: var(--good); }
+
+  select, input[type="number"], input[type="text"] {
+    background: var(--card-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 10px; font-size: 14px;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="color"] {
+    width: 64px; height: 44px; padding: 0; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card-2); cursor: pointer;
+  }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; padding:0; }
+
+  .muted { color: var(--muted); font-size: 12px; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .val { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  #controls.disabled { opacity: .45; pointer-events: none; }
+
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details[open] summary { margin-bottom: 10px; }
+
+  #log {
+    background: #0a0c11; border: 1px solid var(--line); border-radius: 10px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #9fb0c9;
+    padding: 10px; height: 130px; overflow: auto; white-space: pre-wrap;
+  }
+  .banner {
+    background: #3a1d22; border: 1px solid #6b2b34; color: #ffd7d7;
+    padding: 12px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px;
+  }
+  .banner.warn { background: #34301a; border-color: #6b5f2b; color: #f3e7c2; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>RGB Strip Remote <small>Web Bluetooth • BanlanX / SP-series</small></h1>
+    <div class="status"><span id="dot" class="dot"></span><span id="statusText">Disconnected</span></div>
+  </header>
+
+  <div id="unsupported" class="banner" style="display:none">
+    ⚠️ This browser doesn't support Web Bluetooth. Open this page in <b>Google Chrome</b>, <b>Microsoft Edge</b>, or <b>Brave</b> on your Mac. (Safari and Firefox won't work.)
+  </div>
+
+  <!-- CONNECTION -->
+  <div class="card">
+    <h2>Connection</h2>
+    <div class="row">
+      <label class="field" style="flex:1; min-width:220px">
+        <span>Controller protocol</span>
+        <select id="profile">
+          <option value="banlanx" selected>BanlanX app — SP6xxE (SP611E / SP617E / SP630E …)</option>
+          <option value="sp110e">SP110E / SP107E (older 4-byte protocol)</option>
+        </select>
+      </label>
+      <label class="field" style="align-self:flex-end">
+        <span>&nbsp;</span>
+        <label class="muted" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="showAll" /> Show all BLE devices
+        </label>
+      </label>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="connect" class="primary">🔗 Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <span id="devName" class="pill">no device</span>
+    </div>
+    <p class="muted" style="margin:12px 0 0">
+      Close the <b>BanlanX app on your phone</b> first — the strip allows only one Bluetooth connection at a time.
+    </p>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls" class="card disabled">
+    <h2>Controls</h2>
+
+    <div class="row">
+      <button id="powerOn" class="good">⏻ ON</button>
+      <button id="powerOff" class="danger">⏻ OFF</button>
+    </div>
+
+    <div class="row">
+      <label class="field" style="flex:1">
+        <span>Brightness <span id="briVal" class="val"></span></span>
+        <input type="range" id="brightness" min="0" max="255" value="200" />
+      </label>
+    </div>
+
+    <div class="row" style="align-items:flex-end">
+      <label class="field">
+        <span>Color</span>
+        <input type="color" id="color" value="#ff0040" />
+      </label>
+      <button id="applyColor">Apply color</button>
+      <div class="swatches" id="swatches" style="flex:1"></div>
+    </div>
+    <div class="row" id="colorOrderRow">
+      <label class="field">
+        <span>Color order (if colors look swapped)</span>
+        <select id="colorOrder">
+          <option value="rgb" selected>RGB</option>
+          <option value="grb">GRB</option>
+          <option value="bgr">BGR</option>
+          <option value="rbg">RBG</option>
+          <option value="gbr">GBR</option>
+          <option value="brg">BRG</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- BanlanX effects -->
+    <div id="banlanxBlock">
+      <div class="row" style="margin-top:16px">
+        <label class="field" style="flex:1; min-width:150px">
+          <span>Speed <span id="speedVal" class="val"></span></span>
+          <input type="range" id="speed" min="0" max="255" value="160" />
+        </label>
+        <label class="field" style="flex:1; min-width:150px">
+          <span>Effect length <span id="lengthVal" class="val"></span></span>
+          <input type="range" id="length" min="0" max="255" value="140" />
+        </label>
+      </div>
+      <h2 style="margin-top:18px">Effects</h2>
+      <div class="grid" id="effectGrid"></div>
+      <div class="row" style="margin-top:10px">
+        <label class="field">
+          <span>Try effect # (0–255)</span>
+          <input type="number" id="effectNum" min="0" max="255" value="1" style="width:110px"/>
+        </label>
+        <button id="effectNumGo" style="align-self:flex-end">Set effect</button>
+      </div>
+    </div>
+
+    <!-- SP110E mode -->
+    <div id="sp110eBlock" style="display:none">
+      <div class="row" style="margin-top:16px">
+        <label class="field" style="flex:1">
+          <span>Speed <span id="speed2Val" class="val"></span></span>
+          <input type="range" id="speed2" min="0" max="255" value="160" />
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="field">
+          <span>Effect / mode # (0–255)</span>
+          <input type="number" id="modeNum" min="0" max="255" value="1" style="width:110px"/>
+        </label>
+        <button id="modeGo" style="align-self:flex-end">Set mode</button>
+      </div>
+    </div>
+
+    <details style="margin-top:18px">
+      <summary>Advanced — send raw hex</summary>
+      <div class="row">
+        <input type="text" id="rawHex" placeholder="e.g. A0 62 01 01" style="flex:1; font-family:ui-monospace,monospace"/>
+        <button id="rawSend">Send</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Bytes are written to characteristic <code>ffe1</code>. Use this to test commands captured from the official app.</p>
+    </details>
+  </div>
+
+  <!-- LOG -->
+  <div class="card">
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <p class="muted" style="text-align:center">
+    No data leaves your Mac. Everything runs locally over Bluetooth. •
+    <a href="https://caniuse.com/web-bluetooth" target="_blank" rel="noreferrer">Web Bluetooth support</a>
+  </p>
+</div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ *  Protocol profiles
+ *  Both BanlanX (SP6xxE) and SP110E expose the same GATT:
+ *    service        0000ffe0-0000-1000-8000-00805f9b34fb
+ *    write char     0000ffe1-0000-1000-8000-00805f9b34fb
+ *  Only the command byte format differs.
+ * ------------------------------------------------------------------ */
+const SERVICE   = "0000ffe0-0000-1000-8000-00805f9b34fb";
+const CHAR      = "0000ffe1-0000-1000-8000-00805f9b34fb";
+const VENDOR_SVC = "5833ff01-9b8b-5191-6142-22a4536ef123"; // SP6xxE vendor service (declared so Web BT can see it)
+
+const PROFILES = {
+  banlanx: {
+    // A0 <cmd> <len> <data...>
+    power:      on   => [0xA0, 0x62, 0x01, on ? 0x01 : 0x00],
+    brightness: v    => [0xA0, 0x66, 0x01, v & 0xff],
+    speed:      v    => [0xA0, 0x67, 0x01, v & 0xff],
+    length:     v    => [0xA0, 0x68, 0x01, v & 0xff],
+    effect:     n    => [0xA0, 0x63, 0x01, n & 0xff],
+    staticMode: ()   => [0xA0, 0x63, 0x01, 0xBE],            // "RGB control" / static color
+    color:  (r,g,b,bri) => [0xA0, 0x69, 0x04, r & 0xff, g & 0xff, b & 0xff, bri & 0xff],
+    hasStatic: true,
+  },
+  sp110e: {
+    // <d1> <d2> <d3> <cmd>
+    power:      on => on ? [0,0,0,0xAA] : [0,0,0,0xAB],
+    brightness: v  => [v & 0xff, 0, 0, 0x2A],
+    speed:      v  => [v & 0xff, 0, 0, 0x03],
+    effect:     n  => [n & 0xff, 0, 0, 0x2C],
+    color:  (r,g,b) => [r & 0xff, g & 0xff, b & 0xff, 0x1E],
+    hasStatic: false,
+  },
+};
+
+// Named effects for the BanlanX SP6xxE controllers (effect byte for A0 63 01 xx)
+const EFFECTS = [
+  ["Static color", 0xBE],
+  ["Rainbow", 0x01],
+  ["Rainbow meteor", 0x02],
+  ["Rainbow stars", 0x03],
+  ["Rainbow spin", 0x04],
+  ["Red/Yellow fire", 0x05],
+  ["Red/Purple fire", 0x06],
+  ["Green/Yellow fire", 0x07],
+  ["Green/Cyan fire", 0x08],
+  ["Red comet", 0x0B],
+  ["Blue meteor", 0x14],
+  ["Red/Blue snake", 0x1A],
+  ["Cyan wave", 0x32],
+  ["Red/Yellow wave", 0x37],
+  ["White stars", 0x50],
+  ["Blue bg stars", 0x53],
+];
+
+const SWATCHES = ["#ff0000","#ff7a00","#ffd400","#34ff00","#00ffd0","#0066ff","#7a00ff","#ff00c8","#ffffff"];
+
+/* ------------------------------------------------------------------ *
+ *  State + helpers
+ * ------------------------------------------------------------------ */
+let device = null, server = null, characteristic = null;
+let profile = PROFILES.banlanx;
+let writeChain = Promise.resolve();      // serialize all BLE writes
+
+const $ = id => document.getElementById(id);
+const log = (msg, cls) => {
+  const el = $("log");
+  const time = new Date().toTimeString().slice(0,8);
+  el.textContent += `[${time}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+};
+const hex = arr => Array.from(arr, b => b.toString(16).padStart(2,"0").toUpperCase()).join(" ");
+
+function setConnected(yes) {
+  $("dot").classList.toggle("on", yes);
+  $("statusText").textContent = yes ? "Connected" : "Disconnected";
+  $("controls").classList.toggle("disabled", !yes);
+  $("connect").disabled = yes;
+  $("disconnect").disabled = !yes;
+}
+
+/* queue a write so rapid slider moves don't overrun the BLE link */
+function send(bytes) {
+  const data = Uint8Array.from(bytes);
+  writeChain = writeChain.then(async () => {
+    if (!characteristic) return;
+    try {
+      if (characteristic.properties.writeWithoutResponse && characteristic.writeValueWithoutResponse) {
+        await characteristic.writeValueWithoutResponse(data);
+      } else {
+        await characteristic.writeValue(data);
+      }
+      log("→ " + hex(data));
+    } catch (e) {
+      log("✗ write failed: " + e.message);
+    }
+  }).catch(() => {});
+  return writeChain;
+}
+
+/* coalescing throttle for sliders: keep only the latest value pending */
+function throttled(fn, ms = 60) {
+  let pending = null, timer = null;
+  return (v) => {
+    pending = v;
+    if (timer) return;
+    fn(pending); pending = null;
+    timer = setTimeout(() => {
+      timer = null;
+      if (pending !== null) { const p = pending; pending = null; fn(p); }
+    }, ms);
+  };
+}
+
+const hexToRgb = h => {
+  const n = parseInt(h.slice(1), 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+};
+function orderRgb(r, g, b) {
+  const map = { r, g, b };
+  const [a,c,d] = $("colorOrder").value.split("");
+  return [map[a], map[c], map[d]];
+}
+
+/* ------------------------------------------------------------------ *
+ *  Connect / disconnect
+ * ------------------------------------------------------------------ */
+async function connect() {
+  if (!navigator.bluetooth) { log("Web Bluetooth not available."); return; }
+  const showAll = $("showAll").checked;
+  const opts = showAll
+    ? { acceptAllDevices: true, optionalServices: [SERVICE, VENDOR_SVC] }
+    : { filters: [
+          { services: [SERVICE] },
+          { namePrefix: "SP" },
+          { namePrefix: "BanlanX" },
+          { namePrefix: "LED" },
+        ],
+        optionalServices: [SERVICE, VENDOR_SVC] };
+  try {
+    log("Requesting device…");
+    device = await navigator.bluetooth.requestDevice(opts);
+    $("devName").textContent = device.name || "unknown device";
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    log("Connecting to GATT…");
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE);
+    characteristic = await service.getCharacteristic(CHAR);
+    // best-effort: listen for status notifications
+    try {
+      await characteristic.startNotifications();
+      characteristic.addEventListener("characteristicvaluechanged", e => {
+        const v = new Uint8Array(e.target.value.buffer);
+        log("← " + hex(v));
+      });
+    } catch (_) {}
+    setConnected(true);
+    log("Connected to " + (device.name || "device") + ".");
+  } catch (e) {
+    log("Connection cancelled / failed: " + e.message);
+  }
+}
+
+function onDisconnected() {
+  setConnected(false);
+  characteristic = null; server = null;
+  log("Device disconnected.");
+}
+
+function disconnect() {
+  if (device && device.gatt.connected) device.gatt.disconnect();
+  else onDisconnected();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Wire up UI
+ * ------------------------------------------------------------------ */
+function buildSwatches() {
+  const box = $("swatches");
+  SWATCHES.forEach(c => {
+    const b = document.createElement("button");
+    b.className = "swatch"; b.style.background = c; b.title = c;
+    b.onclick = () => { $("color").value = c; applyColor(); };
+    box.appendChild(b);
+  });
+}
+function buildEffects() {
+  const grid = $("effectGrid");
+  grid.innerHTML = "";
+  EFFECTS.forEach(([name, code]) => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.onclick = () => send(profile.effect(code));
+    grid.appendChild(b);
+  });
+}
+
+function applyColor() {
+  const [r,g,b] = hexToRgb($("color").value);
+  const [o1,o2,o3] = orderRgb(r,g,b);
+  if (profile.hasStatic) {
+    send(profile.staticMode());
+    send(profile.color(o1, o2, o3, Number($("brightness").value)));
+  } else {
+    send(profile.color(o1, o2, o3));
+  }
+}
+
+function switchProfile() {
+  profile = PROFILES[$("profile").value];
+  const isBanlanx = $("profile").value === "banlanx";
+  $("banlanxBlock").style.display = isBanlanx ? "" : "none";
+  $("sp110eBlock").style.display  = isBanlanx ? "none" : "";
+  log("Protocol set to: " + $("profile").options[$("profile").selectedIndex].text);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  if (!navigator.bluetooth) {
+    $("unsupported").style.display = "";
+    $("connect").disabled = true;
+  }
+
+  buildSwatches();
+  buildEffects();
+  switchProfile();
+
+  // labels
+  const sync = (slider, label) => { $(label).textContent = $(slider).value; };
+  ["brightness:briVal","speed:speedVal","length:lengthVal","speed2:speed2Val"]
+    .forEach(p => { const [s,l] = p.split(":"); sync(s,l); });
+
+  $("connect").onclick = connect;
+  $("disconnect").onclick = disconnect;
+  $("profile").onchange = switchProfile;
+
+  $("powerOn").onclick  = () => send(profile.power(true));
+  $("powerOff").onclick = () => send(profile.power(false));
+
+  const briSend = throttled(v => send(profile.brightness(v)));
+  $("brightness").oninput = e => { $("briVal").textContent = e.target.value; briSend(Number(e.target.value)); };
+
+  $("applyColor").onclick = applyColor;
+  $("colorOrder").onchange = applyColor;
+
+  // BanlanX-only
+  const speedSend = throttled(v => send(profile.speed(v)));
+  $("speed").oninput  = e => { $("speedVal").textContent = e.target.value; speedSend(Number(e.target.value)); };
+  const lenSend = throttled(v => send(profile.length(v)));
+  $("length").oninput = e => { $("lengthVal").textContent = e.target.value; lenSend(Number(e.target.value)); };
+  $("effectNumGo").onclick = () => send(profile.effect(Number($("effectNum").value)));
+
+  // SP110E-only
+  const speed2Send = throttled(v => send(profile.speed(v)));
+  $("speed2").oninput = e => { $("speed2Val").textContent = e.target.value; speed2Send(Number(e.target.value)); };
+  $("modeGo").onclick = () => send(profile.effect(Number($("modeNum").value)));
+
+  // raw
+  $("rawSend").onclick = () => {
+    const bytes = ($("rawHex").value.match(/[0-9a-f]{2}/gi) || []).map(h => parseInt(h,16));
+    if (bytes.length) send(bytes);
+    else log("No valid hex bytes to send.");
+  };
+
+  log("Ready. Pick your protocol, then Connect.");
+});
+</script>
+</body>
+</html>
