@@ -11,7 +11,10 @@ Everything is a **single file** (`index.html`). It talks to the strip directly o
 
 ## ✨ What it can do
 
-- Connect / disconnect to the strip over Bluetooth
+- **Control one *or many* strips at once** — add multiple devices and every command is
+  broadcast to all of them **in sync** (each strip keeps its own protocol; tick/untick a
+  strip to include or exclude it from the group)
+- Connect / disconnect strips over Bluetooth
 - Power **ON / OFF**
 - **Brightness** slider
 - **Color** picker + quick swatches (with a color-order fix if R/G/B look swapped)
@@ -21,15 +24,17 @@ Everything is a **single file** (`index.html`). It talks to the strip directly o
 - **Advanced:** send raw hex commands (for testing captured commands)
 - A live **log** of every command sent
 
-It supports **two protocols** — pick the right one in the dropdown:
+It supports **two protocols**. Pick the one for the device you're about to add in the
+dropdown; after it's connected you can also change it per-device from the row's own selector:
 
 | Protocol option | Use it if… | Devices |
 |---|---|---|
 | **BanlanX — SP6xxE** *(default)* | You use the app literally called **“BanlanX”** | SP611E, SP617E, SP621E, SP628E, SP630E … |
 | **SP110E / SP107E** | You use the older *SP110E* / *LED Hue* style app | SP110E, SP107E, SP105E … |
 
-Both use the same Bluetooth service, so if one doesn’t respond, just switch the dropdown
-and try the other — no reconnect needed.
+Both use the same Bluetooth service, so if a strip doesn’t respond, just switch its
+protocol selector and try the other — no reconnect needed. You can even mix strips of
+different types in the same sync group.
 
 ---
 
@@ -89,10 +94,23 @@ python3 -m http.server 8765
    The strip accepts only **one** Bluetooth connection at a time.
 2. Open **`index.html`** in **Chrome** (double-click it, or drag it onto the Chrome icon).
 3. Make sure the **protocol dropdown** matches your controller (leave it on *BanlanX* if unsure).
-4. Click **🔗 Connect** → pick your device from the list → it’ll show a name like `SP611E`.
+4. Click **➕ Add / Connect device** → pick your strip from the list → it appears in the
+   **Devices** list with a name like `SP611E`.
    - Don’t see it? Tick **“Show all BLE devices”** and try again, then pick the one that
      looks like your strip.
 5. Use the controls. 🎉
+
+### Controlling several strips together
+
+- Click **➕ Add / Connect device** again for each additional strip — they all join the
+  **sync group**, and every control (power, brightness, color, effects, sliders) is sent
+  to **all ticked strips at the same time**.
+- Untick a strip's **sync** box to leave it out temporarily; tick it again to rejoin.
+- Each row has its own protocol selector and an **✕** to disconnect just that strip;
+  **Disconnect all** drops the whole group.
+
+> **Note:** Bluetooth fans out the commands almost simultaneously, but it isn't
+> frame-accurate — strips will match within a fraction of a second, not to the millisecond.
 
 > **Tip:** If the colors look wrong (e.g. red shows as green), change **Color order**
 > from `RGB` to `GRB` (most WS2812 strips) and re-apply the color.

@@ -35,7 +35,7 @@
   h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
   h1 small { color: var(--muted); font-weight: 400; font-size: 12px; display:block; margin-top:2px;}
   .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 10px var(--bad); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 10px var(--bad); flex:none; }
   .dot.on { background: var(--good); box-shadow: 0 0 10px var(--good); }
 
   .card {
@@ -76,6 +76,17 @@
   .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
   .swatch { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; padding:0; }
 
+  /* connected device rows */
+  .devrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card-2); margin-top: 8px;
+  }
+  .devrow .devname { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .devrow select.devproto { padding: 5px 8px; font-size: 12px; border-radius: 8px; }
+  .devrow .synced { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; }
+  .devrow button.x { padding: 6px 11px; color: var(--bad); }
+
   .muted { color: var(--muted); font-size: 12px; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
   .val { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
@@ -94,27 +105,26 @@
     background: #3a1d22; border: 1px solid #6b2b34; color: #ffd7d7;
     padding: 12px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px;
   }
-  .banner.warn { background: #34301a; border-color: #6b5f2b; color: #f3e7c2; }
   a { color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>RGB Strip Remote <small>Web Bluetooth • BanlanX / SP-series</small></h1>
+    <h1>RGB Strip Remote <small>Web Bluetooth • control one or many strips together</small></h1>
     <div class="status"><span id="dot" class="dot"></span><span id="statusText">Disconnected</span></div>
   </header>
 
   <div id="unsupported" class="banner" style="display:none">
-    ⚠️ This browser doesn't support Web Bluetooth. Open this page in <b>Google Chrome</b>, <b>Microsoft Edge</b>, or <b>Brave</b> on your Mac. (Safari and Firefox won't work.)
+    ⚠️ This browser doesn't support Web Bluetooth. Open this page in <b>Google Chrome</b>, <b>Microsoft Edge</b>, or <b>Brave</b> on a computer (or Android). (Safari, Firefox, and all iPhones/iPads won't work.)
   </div>
 
   <!-- CONNECTION -->
   <div class="card">
-    <h2>Connection</h2>
+    <h2>Devices</h2>
     <div class="row">
       <label class="field" style="flex:1; min-width:220px">
-        <span>Controller protocol</span>
+        <span>Protocol for the next device you add</span>
         <select id="profile">
           <option value="banlanx" selected>BanlanX app — SP6xxE (SP611E / SP617E / SP630E …)</option>
           <option value="sp110e">SP110E / SP107E (older 4-byte protocol)</option>
@@ -128,18 +138,21 @@
       </label>
     </div>
     <div class="row" style="margin-top:14px">
-      <button id="connect" class="primary">🔗 Connect</button>
-      <button id="disconnect" disabled>Disconnect</button>
-      <span id="devName" class="pill">no device</span>
+      <button id="connect" class="primary">➕ Add / Connect device</button>
+      <button id="disconnectAll" disabled>Disconnect all</button>
     </div>
+
+    <div id="deviceList"></div>
+
     <p class="muted" style="margin:12px 0 0">
-      Close the <b>BanlanX app on your phone</b> first — the strip allows only one Bluetooth connection at a time.
+      Click <b>Add</b> once per strip. Each strip you add joins the <b>sync group</b> — every control below is sent to all
+      ticked devices at the same time. Close the <b>BanlanX phone app</b> first (each strip allows only one connection).
     </p>
   </div>
 
   <!-- CONTROLS -->
   <div id="controls" class="card disabled">
-    <h2>Controls</h2>
+    <h2>Controls <span class="muted" style="text-transform:none;letter-spacing:0">— broadcast to all synced devices</span></h2>
 
     <div class="row">
       <button id="powerOn" class="good">⏻ ON</button>
@@ -161,7 +174,7 @@
       <button id="applyColor">Apply color</button>
       <div class="swatches" id="swatches" style="flex:1"></div>
     </div>
-    <div class="row" id="colorOrderRow">
+    <div class="row">
       <label class="field">
         <span>Color order (if colors look swapped)</span>
         <select id="colorOrder">
@@ -175,53 +188,34 @@
       </label>
     </div>
 
-    <!-- BanlanX effects -->
-    <div id="banlanxBlock">
-      <div class="row" style="margin-top:16px">
-        <label class="field" style="flex:1; min-width:150px">
-          <span>Speed <span id="speedVal" class="val"></span></span>
-          <input type="range" id="speed" min="0" max="255" value="160" />
-        </label>
-        <label class="field" style="flex:1; min-width:150px">
-          <span>Effect length <span id="lengthVal" class="val"></span></span>
-          <input type="range" id="length" min="0" max="255" value="140" />
-        </label>
-      </div>
-      <h2 style="margin-top:18px">Effects</h2>
-      <div class="grid" id="effectGrid"></div>
-      <div class="row" style="margin-top:10px">
-        <label class="field">
-          <span>Try effect # (0–255)</span>
-          <input type="number" id="effectNum" min="0" max="255" value="1" style="width:110px"/>
-        </label>
-        <button id="effectNumGo" style="align-self:flex-end">Set effect</button>
-      </div>
+    <div class="row" style="margin-top:16px">
+      <label class="field" style="flex:1; min-width:150px">
+        <span>Speed <span id="speedVal" class="val"></span></span>
+        <input type="range" id="speed" min="0" max="255" value="160" />
+      </label>
+      <label class="field" style="flex:1; min-width:150px">
+        <span>Effect length <span id="lengthVal" class="val"></span> <span class="muted">(BanlanX)</span></span>
+        <input type="range" id="length" min="0" max="255" value="140" />
+      </label>
     </div>
 
-    <!-- SP110E mode -->
-    <div id="sp110eBlock" style="display:none">
-      <div class="row" style="margin-top:16px">
-        <label class="field" style="flex:1">
-          <span>Speed <span id="speed2Val" class="val"></span></span>
-          <input type="range" id="speed2" min="0" max="255" value="160" />
-        </label>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <label class="field">
-          <span>Effect / mode # (0–255)</span>
-          <input type="number" id="modeNum" min="0" max="255" value="1" style="width:110px"/>
-        </label>
-        <button id="modeGo" style="align-self:flex-end">Set mode</button>
-      </div>
+    <h2 style="margin-top:18px">Effects <span class="muted" style="text-transform:none;letter-spacing:0">— BanlanX names; on SP110E these act as mode numbers</span></h2>
+    <div class="grid" id="effectGrid"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="field">
+        <span>Try effect / mode # (0–255)</span>
+        <input type="number" id="effectNum" min="0" max="255" value="1" style="width:120px"/>
+      </label>
+      <button id="effectNumGo" style="align-self:flex-end">Set effect</button>
     </div>
 
     <details style="margin-top:18px">
-      <summary>Advanced — send raw hex</summary>
+      <summary>Advanced — send raw hex (to all synced devices)</summary>
       <div class="row">
         <input type="text" id="rawHex" placeholder="e.g. A0 62 01 01" style="flex:1; font-family:ui-monospace,monospace"/>
         <button id="rawSend">Send</button>
       </div>
-      <p class="muted" style="margin:8px 0 0">Bytes are written to characteristic <code>ffe1</code>. Use this to test commands captured from the official app.</p>
+      <p class="muted" style="margin:8px 0 0">Bytes are written verbatim to characteristic <code>ffe1</code> on every synced device. Use this to test commands captured from the official app.</p>
     </details>
   </div>
 
@@ -232,7 +226,7 @@
   </div>
 
   <p class="muted" style="text-align:center">
-    No data leaves your Mac. Everything runs locally over Bluetooth. •
+    No data leaves your machine. Everything runs locally over Bluetooth. •
     <a href="https://caniuse.com/web-bluetooth" target="_blank" rel="noreferrer">Web Bluetooth support</a>
   </p>
 </div>
@@ -247,8 +241,8 @@
  *    write char     0000ffe1-0000-1000-8000-00805f9b34fb
  *  Only the command byte format differs.
  * ------------------------------------------------------------------ */
-const SERVICE   = "0000ffe0-0000-1000-8000-00805f9b34fb";
-const CHAR      = "0000ffe1-0000-1000-8000-00805f9b34fb";
+const SERVICE    = "0000ffe0-0000-1000-8000-00805f9b34fb";
+const CHAR       = "0000ffe1-0000-1000-8000-00805f9b34fb";
 const VENDOR_SVC = "5833ff01-9b8b-5191-6142-22a4536ef123"; // SP6xxE vendor service (declared so Web BT can see it)
 
 const PROFILES = {
@@ -269,6 +263,7 @@ const PROFILES = {
     brightness: v  => [v & 0xff, 0, 0, 0x2A],
     speed:      v  => [v & 0xff, 0, 0, 0x03],
     effect:     n  => [n & 0xff, 0, 0, 0x2C],
+    length:     null,                                        // not supported -> skipped
     color:  (r,g,b) => [r & 0xff, g & 0xff, b & 0xff, 0x1E],
     hasStatic: false,
   },
@@ -295,48 +290,67 @@ const EFFECTS = [
 ];
 
 const SWATCHES = ["#ff0000","#ff7a00","#ffd400","#34ff00","#00ffd0","#0066ff","#7a00ff","#ff00c8","#ffffff"];
+const PROTO_NAMES = { banlanx: "BanlanX SP6xxE", sp110e: "SP110E / SP107E" };
 
 /* ------------------------------------------------------------------ *
- *  State + helpers
+ *  State
+ *  devices = [{ device, server, char, name, profileKey, sync, writeChain }]
  * ------------------------------------------------------------------ */
-let device = null, server = null, characteristic = null;
-let profile = PROFILES.banlanx;
-let writeChain = Promise.resolve();      // serialize all BLE writes
+let devices = [];
 
 const $ = id => document.getElementById(id);
-const log = (msg, cls) => {
+const log = (msg) => {
   const el = $("log");
-  const time = new Date().toTimeString().slice(0,8);
-  el.textContent += `[${time}] ${msg}\n`;
+  el.textContent += `[${new Date().toTimeString().slice(0,8)}] ${msg}\n`;
   el.scrollTop = el.scrollHeight;
 };
 const hex = arr => Array.from(arr, b => b.toString(16).padStart(2,"0").toUpperCase()).join(" ");
-
-function setConnected(yes) {
-  $("dot").classList.toggle("on", yes);
-  $("statusText").textContent = yes ? "Connected" : "Disconnected";
-  $("controls").classList.toggle("disabled", !yes);
-  $("connect").disabled = yes;
-  $("disconnect").disabled = !yes;
+const hexToRgb = h => { const n = parseInt(h.slice(1), 16); return [(n>>16)&255, (n>>8)&255, n&255]; };
+function orderRgb(r, g, b) {
+  const map = { r, g, b };
+  const [a,c,d] = $("colorOrder").value.split("");
+  return [map[a], map[c], map[d]];
 }
 
-/* queue a write so rapid slider moves don't overrun the BLE link */
-function send(bytes) {
+/* ------------------------------------------------------------------ *
+ *  Writing — one serialized queue per device; broadcasts fan out in
+ *  parallel so all strips receive the command at ~the same instant.
+ * ------------------------------------------------------------------ */
+function writeTo(entry, bytes) {
   const data = Uint8Array.from(bytes);
-  writeChain = writeChain.then(async () => {
-    if (!characteristic) return;
+  entry.writeChain = entry.writeChain.then(async () => {
+    if (!entry.char) return;
     try {
-      if (characteristic.properties.writeWithoutResponse && characteristic.writeValueWithoutResponse) {
-        await characteristic.writeValueWithoutResponse(data);
+      if (entry.char.properties.writeWithoutResponse && entry.char.writeValueWithoutResponse) {
+        await entry.char.writeValueWithoutResponse(data);
       } else {
-        await characteristic.writeValue(data);
+        await entry.char.writeValue(data);
       }
-      log("→ " + hex(data));
     } catch (e) {
-      log("✗ write failed: " + e.message);
+      log(`✗ ${entry.name}: ${e.message}`);
     }
   }).catch(() => {});
-  return writeChain;
+  return entry.writeChain;
+}
+
+/* builder(profile, entry) -> a byte array, OR an array of byte arrays, OR null to skip */
+function broadcast(label, builder, quiet) {
+  const targets = devices.filter(d => d.sync && d.char);
+  if (!targets.length) { if (!quiet) log("No synced devices to send to."); return; }
+  targets.forEach(entry => {
+    let out = builder(PROFILES[entry.profileKey], entry);
+    if (!out) return;                                  // command not supported by this profile
+    if (!Array.isArray(out[0])) out = [out];           // single command -> wrap
+    out.forEach(bytes => writeTo(entry, bytes));
+  });
+  if (!quiet) log(`→ ${label} · ${targets.length} device(s)`);
+}
+
+function broadcastRaw(bytes) {
+  const targets = devices.filter(d => d.sync && d.char);
+  if (!targets.length) { log("No synced devices to send to."); return; }
+  targets.forEach(entry => writeTo(entry, bytes));
+  log(`→ raw ${hex(bytes)} · ${targets.length} device(s)`);
 }
 
 /* coalescing throttle for sliders: keep only the latest value pending */
@@ -353,20 +367,30 @@ function throttled(fn, ms = 60) {
   };
 }
 
-const hexToRgb = h => {
-  const n = parseInt(h.slice(1), 16);
-  return [(n>>16)&255, (n>>8)&255, n&255];
+/* ------------------------------------------------------------------ *
+ *  Command helpers (logical -> broadcast)
+ * ------------------------------------------------------------------ */
+const cmd = {
+  power:  on => broadcast(`Power ${on ? "ON" : "OFF"}`, p => p.power(on)),
+  effect: (code, name) => broadcast(`Effect: ${name}`, p => p.effect(code)),
+  bri:    (v, quiet) => broadcast(`Brightness ${v}`, p => p.brightness(v), quiet),
+  speed:  (v, quiet) => broadcast(`Speed ${v}`, p => p.speed(v), quiet),
+  length: (v, quiet) => broadcast(`Length ${v}`, p => p.length ? p.length(v) : null, quiet),
+  color:  () => {
+    const hexv = $("color").value;
+    const [r,g,b] = hexToRgb(hexv);
+    const [o1,o2,o3] = orderRgb(r,g,b);
+    const bri = Number($("brightness").value);
+    broadcast(`Color ${hexv}`, p => p.hasStatic
+      ? [p.staticMode(), p.color(o1,o2,o3,bri)]
+      : [p.color(o1,o2,o3)]);
+  },
 };
-function orderRgb(r, g, b) {
-  const map = { r, g, b };
-  const [a,c,d] = $("colorOrder").value.split("");
-  return [map[a], map[c], map[d]];
-}
 
 /* ------------------------------------------------------------------ *
- *  Connect / disconnect
+ *  Connect / disconnect (multi-device)
  * ------------------------------------------------------------------ */
-async function connect() {
+async function addDevice() {
   if (!navigator.bluetooth) { log("Web Bluetooth not available."); return; }
   const showAll = $("showAll").checked;
   const opts = showAll
@@ -378,81 +402,133 @@ async function connect() {
           { namePrefix: "LED" },
         ],
         optionalServices: [SERVICE, VENDOR_SVC] };
+  let dev;
   try {
-    log("Requesting device…");
-    device = await navigator.bluetooth.requestDevice(opts);
-    $("devName").textContent = device.name || "unknown device";
-    device.addEventListener("gattserverdisconnected", onDisconnected);
-    log("Connecting to GATT…");
-    server = await device.gatt.connect();
+    log("Select a device to add…");
+    dev = await navigator.bluetooth.requestDevice(opts);
+  } catch (e) {
+    log("Add cancelled: " + e.message);
+    return;
+  }
+  if (devices.some(d => d.device.id === dev.id)) {
+    log("Already connected: " + (dev.name || dev.id));
+    return;
+  }
+  try {
+    log("Connecting to " + (dev.name || "device") + "…");
+    const server = await dev.gatt.connect();
     const service = await server.getPrimaryService(SERVICE);
-    characteristic = await service.getCharacteristic(CHAR);
-    // best-effort: listen for status notifications
+    const char = await service.getCharacteristic(CHAR);
+    const entry = {
+      device: dev, server, char,
+      name: dev.name || "device",
+      profileKey: $("profile").value,
+      sync: true,
+      writeChain: Promise.resolve(),
+    };
+    dev.addEventListener("gattserverdisconnected", () => onDevDisconnected(dev.id));
     try {
-      await characteristic.startNotifications();
-      characteristic.addEventListener("characteristicvaluechanged", e => {
-        const v = new Uint8Array(e.target.value.buffer);
-        log("← " + hex(v));
+      await char.startNotifications();
+      char.addEventListener("characteristicvaluechanged", e => {
+        log("← " + entry.name + ": " + hex(new Uint8Array(e.target.value.buffer)));
       });
     } catch (_) {}
-    setConnected(true);
-    log("Connected to " + (device.name || "device") + ".");
+    devices.push(entry);
+    renderDevices();
+    log(`Connected: ${entry.name} [${PROTO_NAMES[entry.profileKey]}] — ${devices.length} device(s) in group.`);
   } catch (e) {
-    log("Connection cancelled / failed: " + e.message);
+    log("Connection failed: " + e.message);
   }
 }
 
-function onDisconnected() {
-  setConnected(false);
-  characteristic = null; server = null;
-  log("Device disconnected.");
+function onDevDisconnected(id) {
+  const i = devices.findIndex(d => d.device.id === id);
+  if (i < 0) return;
+  const [e] = devices.splice(i, 1);
+  log("Disconnected: " + e.name);
+  renderDevices();
 }
 
-function disconnect() {
-  if (device && device.gatt.connected) device.gatt.disconnect();
-  else onDisconnected();
+function disconnectAll() {
+  devices.slice().forEach(e => { try { if (e.device.gatt.connected) e.device.gatt.disconnect(); } catch (_) {} });
+  devices = [];
+  renderDevices();
+  log("All devices disconnected.");
 }
 
 /* ------------------------------------------------------------------ *
- *  Wire up UI
+ *  Rendering
+ * ------------------------------------------------------------------ */
+function renderDevices() {
+  const box = $("deviceList");
+  box.innerHTML = "";
+  if (!devices.length) {
+    const p = document.createElement("p");
+    p.className = "muted"; p.style.margin = "10px 0 0";
+    p.textContent = "No devices connected yet.";
+    box.appendChild(p);
+  }
+  devices.forEach(entry => {
+    const row = document.createElement("div"); row.className = "devrow";
+
+    const dot = document.createElement("span"); dot.className = "dot on";
+
+    const name = document.createElement("span"); name.className = "devname"; name.textContent = entry.name;
+
+    const proto = document.createElement("select"); proto.className = "devproto";
+    Object.keys(PROTO_NAMES).forEach(k => {
+      const o = document.createElement("option");
+      o.value = k; o.textContent = PROTO_NAMES[k];
+      if (k === entry.profileKey) o.selected = true;
+      proto.appendChild(o);
+    });
+    proto.onchange = () => { entry.profileKey = proto.value; log(`${entry.name} → ${PROTO_NAMES[proto.value]}`); };
+
+    const syncL = document.createElement("label"); syncL.className = "synced muted";
+    const syncC = document.createElement("input"); syncC.type = "checkbox"; syncC.checked = entry.sync;
+    syncC.onchange = () => { entry.sync = syncC.checked; };
+    syncL.appendChild(syncC); syncL.appendChild(document.createTextNode(" sync"));
+
+    const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Disconnect this device";
+    x.onclick = () => {
+      try { if (entry.device.gatt.connected) entry.device.gatt.disconnect(); else onDevDisconnected(entry.device.id); }
+      catch (_) { onDevDisconnected(entry.device.id); }
+    };
+
+    row.append(dot, name, proto, syncL, x);
+    box.appendChild(row);
+  });
+  updateConnState();
+}
+
+function updateConnState() {
+  const n = devices.length;
+  $("dot").classList.toggle("on", n > 0);
+  $("statusText").textContent = n > 0 ? `Connected: ${n}` : "Disconnected";
+  $("controls").classList.toggle("disabled", n === 0);
+  $("disconnectAll").disabled = n === 0;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Build static UI
  * ------------------------------------------------------------------ */
 function buildSwatches() {
   const box = $("swatches");
   SWATCHES.forEach(c => {
     const b = document.createElement("button");
     b.className = "swatch"; b.style.background = c; b.title = c;
-    b.onclick = () => { $("color").value = c; applyColor(); };
+    b.onclick = () => { $("color").value = c; cmd.color(); };
     box.appendChild(b);
   });
 }
 function buildEffects() {
   const grid = $("effectGrid");
-  grid.innerHTML = "";
   EFFECTS.forEach(([name, code]) => {
     const b = document.createElement("button");
     b.textContent = name;
-    b.onclick = () => send(profile.effect(code));
+    b.onclick = () => cmd.effect(code, name);
     grid.appendChild(b);
   });
-}
-
-function applyColor() {
-  const [r,g,b] = hexToRgb($("color").value);
-  const [o1,o2,o3] = orderRgb(r,g,b);
-  if (profile.hasStatic) {
-    send(profile.staticMode());
-    send(profile.color(o1, o2, o3, Number($("brightness").value)));
-  } else {
-    send(profile.color(o1, o2, o3));
-  }
-}
-
-function switchProfile() {
-  profile = PROFILES[$("profile").value];
-  const isBanlanx = $("profile").value === "banlanx";
-  $("banlanxBlock").style.display = isBanlanx ? "" : "none";
-  $("sp110eBlock").style.display  = isBanlanx ? "none" : "";
-  log("Protocol set to: " + $("profile").options[$("profile").selectedIndex].text);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -463,46 +539,46 @@ window.addEventListener("DOMContentLoaded", () => {
 
   buildSwatches();
   buildEffects();
-  switchProfile();
+  renderDevices();
 
-  // labels
-  const sync = (slider, label) => { $(label).textContent = $(slider).value; };
-  ["brightness:briVal","speed:speedVal","length:lengthVal","speed2:speed2Val"]
-    .forEach(p => { const [s,l] = p.split(":"); sync(s,l); });
+  // slider labels
+  [["brightness","briVal"],["speed","speedVal"],["length","lengthVal"]]
+    .forEach(([s,l]) => { $(l).textContent = $(s).value; });
 
-  $("connect").onclick = connect;
-  $("disconnect").onclick = disconnect;
-  $("profile").onchange = switchProfile;
+  $("connect").onclick = addDevice;
+  $("disconnectAll").onclick = disconnectAll;
 
-  $("powerOn").onclick  = () => send(profile.power(true));
-  $("powerOff").onclick = () => send(profile.power(false));
+  $("powerOn").onclick  = () => cmd.power(true);
+  $("powerOff").onclick = () => cmd.power(false);
 
-  const briSend = throttled(v => send(profile.brightness(v)));
-  $("brightness").oninput = e => { $("briVal").textContent = e.target.value; briSend(Number(e.target.value)); };
+  // sliders: quiet while dragging (throttled), final value logged on release
+  const briSend = throttled(v => cmd.bri(v, true));
+  $("brightness").oninput  = e => { $("briVal").textContent = e.target.value; briSend(Number(e.target.value)); };
+  $("brightness").onchange = e => cmd.bri(Number(e.target.value));
 
-  $("applyColor").onclick = applyColor;
-  $("colorOrder").onchange = applyColor;
-
-  // BanlanX-only
-  const speedSend = throttled(v => send(profile.speed(v)));
+  const speedSend = throttled(v => cmd.speed(v, true));
   $("speed").oninput  = e => { $("speedVal").textContent = e.target.value; speedSend(Number(e.target.value)); };
-  const lenSend = throttled(v => send(profile.length(v)));
-  $("length").oninput = e => { $("lengthVal").textContent = e.target.value; lenSend(Number(e.target.value)); };
-  $("effectNumGo").onclick = () => send(profile.effect(Number($("effectNum").value)));
+  $("speed").onchange = e => cmd.speed(Number(e.target.value));
 
-  // SP110E-only
-  const speed2Send = throttled(v => send(profile.speed(v)));
-  $("speed2").oninput = e => { $("speed2Val").textContent = e.target.value; speed2Send(Number(e.target.value)); };
-  $("modeGo").onclick = () => send(profile.effect(Number($("modeNum").value)));
+  const lenSend = throttled(v => cmd.length(v, true));
+  $("length").oninput  = e => { $("lengthVal").textContent = e.target.value; lenSend(Number(e.target.value)); };
+  $("length").onchange = e => cmd.length(Number(e.target.value));
 
-  // raw
+  $("applyColor").onclick = () => cmd.color();
+  $("colorOrder").onchange = () => cmd.color();
+
+  $("effectNumGo").onclick = () => {
+    const n = Number($("effectNum").value);
+    cmd.effect(n, "#" + n);
+  };
+
   $("rawSend").onclick = () => {
-    const bytes = ($("rawHex").value.match(/[0-9a-f]{2}/gi) || []).map(h => parseInt(h,16));
-    if (bytes.length) send(bytes);
+    const bytes = ($("rawHex").value.match(/[0-9a-f]{2}/gi) || []).map(h => parseInt(h, 16));
+    if (bytes.length) broadcastRaw(bytes);
     else log("No valid hex bytes to send.");
   };
 
-  log("Ready. Pick your protocol, then Connect.");
+  log("Ready. Add one or more devices, then use the controls to drive them together.");
 });
 </script>
 </body>
