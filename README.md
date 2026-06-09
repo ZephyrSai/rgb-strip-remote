@@ -31,7 +31,8 @@ laptop on the network can drive the lights.
 - Connect / disconnect strips over Bluetooth
 - Power **ON / OFF**
 - **Brightness** slider
-- **Color** picker + quick swatches (with a color-order fix if R/G/B look swapped)
+- **Color** picker + quick swatches, with a **per-strip color-order fix** (RGB/GRB/BGR…) so
+  mismatched strips can be made to show the same color
 - **Effects** (rainbow, meteor, fire, comet, stars…) — for BanlanX SP6xxE controllers
 - **Speed** and **effect length** sliders
 - Try any **effect/mode number** the firmware supports
@@ -126,8 +127,10 @@ python3 -m http.server 8765
 > **Note:** Bluetooth fans out the commands almost simultaneously, but it isn't
 > frame-accurate — strips will match within a fraction of a second, not to the millisecond.
 
-> **Tip:** If the colors look wrong (e.g. red shows as green), change **Color order**
-> from `RGB` to `GRB` (most WS2812 strips) and re-apply the color.
+> **Tip — colors differ between strips, or look wrong on one:** each strip has its **own
+> color-order dropdown** in the **Devices** list (RGB / GRB / BGR …). Strips can be wired
+> differently, so the same color command can show as different colors. Change the odd one
+> out (GRB is common for WS2812) until they match — it re-applies the current color instantly.
 
 ---
 

@@ -78,11 +78,11 @@
 
   /* connected device rows */
   .devrow {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
     background: var(--card-2); margin-top: 8px;
   }
-  .devrow .devname { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .devrow .devname { flex: 1; min-width: 120px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .devrow select.devproto { padding: 5px 8px; font-size: 12px; border-radius: 8px; }
   .devrow .synced { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; }
   .devrow button.x { padding: 6px 11px; color: var(--bad); }
@@ -174,19 +174,10 @@
       <button id="applyColor">Apply color</button>
       <div class="swatches" id="swatches" style="flex:1"></div>
     </div>
-    <div class="row">
-      <label class="field">
-        <span>Color order (if colors look swapped)</span>
-        <select id="colorOrder">
-          <option value="rgb" selected>RGB</option>
-          <option value="grb">GRB</option>
-          <option value="bgr">BGR</option>
-          <option value="rbg">RBG</option>
-          <option value="gbr">GBR</option>
-          <option value="brg">BRG</option>
-        </select>
-      </label>
-    </div>
+    <p class="muted" style="margin:2px 0 0">
+      Colours differ between strips? Each strip has its own <b>colour-order</b> dropdown in the
+      <b>Devices</b> list above (RGB / GRB / BGR …). Change the odd one out until they match.
+    </p>
 
     <div class="row" style="margin-top:16px">
       <label class="field" style="flex:1; min-width:150px">
@@ -291,10 +282,12 @@ const EFFECTS = [
 
 const SWATCHES = ["#ff0000","#ff7a00","#ffd400","#34ff00","#00ffd0","#0066ff","#7a00ff","#ff00c8","#ffffff"];
 const PROTO_NAMES = { banlanx: "BanlanX SP6xxE", sp110e: "SP110E / SP107E" };
+const ORDERS = ["rgb","grb","bgr","rbg","gbr","brg"];   // per-device colour channel order
+const DEFAULT_ORDER = "rgb";
 
 /* ------------------------------------------------------------------ *
  *  State
- *  devices = [{ device, server, char, name, profileKey, sync, writeChain }]
+ *  devices = [{ device, server, char, name, profileKey, colorOrder, sync, writeChain }]
  * ------------------------------------------------------------------ */
 let devices = [];
 
@@ -306,9 +299,9 @@ const log = (msg) => {
 };
 const hex = arr => Array.from(arr, b => b.toString(16).padStart(2,"0").toUpperCase()).join(" ");
 const hexToRgb = h => { const n = parseInt(h.slice(1), 16); return [(n>>16)&255, (n>>8)&255, n&255]; };
-function orderRgb(r, g, b) {
+function orderRgb(r, g, b, order) {
   const map = { r, g, b };
-  const [a,c,d] = $("colorOrder").value.split("");
+  const [a,c,d] = (order || DEFAULT_ORDER).split("");
   return [map[a], map[c], map[d]];
 }
 
@@ -379,11 +372,13 @@ const cmd = {
   color:  () => {
     const hexv = $("color").value;
     const [r,g,b] = hexToRgb(hexv);
-    const [o1,o2,o3] = orderRgb(r,g,b);
     const bri = Number($("brightness").value);
-    broadcast(`Color ${hexv}`, p => p.hasStatic
-      ? [p.staticMode(), p.color(o1,o2,o3,bri)]
-      : [p.color(o1,o2,o3)]);
+    broadcast(`Color ${hexv}`, (p, entry) => {
+      const [o1,o2,o3] = orderRgb(r, g, b, entry.colorOrder);   // each strip uses its own order
+      return p.hasStatic
+        ? [p.staticMode(), p.color(o1,o2,o3,bri)]
+        : [p.color(o1,o2,o3)];
+    });
   },
 };
 
@@ -423,6 +418,7 @@ async function addDevice() {
       device: dev, server, char,
       name: dev.name || "device",
       profileKey: $("profile").value,
+      colorOrder: DEFAULT_ORDER,
       sync: true,
       writeChain: Promise.resolve(),
     };
@@ -484,6 +480,15 @@ function renderDevices() {
     });
     proto.onchange = () => { entry.profileKey = proto.value; log(`${entry.name} → ${PROTO_NAMES[proto.value]}`); };
 
+    const ord = document.createElement("select"); ord.className = "devproto"; ord.title = "Colour order — change this if this strip's colours look wrong";
+    ORDERS.forEach(o => {
+      const op = document.createElement("option");
+      op.value = o; op.textContent = o.toUpperCase();
+      if (o === entry.colorOrder) op.selected = true;
+      ord.appendChild(op);
+    });
+    ord.onchange = () => { entry.colorOrder = ord.value; log(`${entry.name} colour order → ${ord.value.toUpperCase()}`); cmd.color(); };
+
     const syncL = document.createElement("label"); syncL.className = "synced muted";
     const syncC = document.createElement("input"); syncC.type = "checkbox"; syncC.checked = entry.sync;
     syncC.onchange = () => { entry.sync = syncC.checked; };
@@ -495,7 +500,7 @@ function renderDevices() {
       catch (_) { onDevDisconnected(entry.device.id); }
     };
 
-    row.append(dot, name, proto, syncL, x);
+    row.append(dot, name, proto, ord, syncL, x);
     box.appendChild(row);
   });
   updateConnState();
@@ -565,7 +570,6 @@ window.addEventListener("DOMContentLoaded", () => {
   $("length").onchange = e => cmd.length(Number(e.target.value));
 
   $("applyColor").onclick = () => cmd.color();
-  $("colorOrder").onchange = () => cmd.color();
 
   $("effectNumGo").onclick = () => {
     const n = Number($("effectNum").value);
