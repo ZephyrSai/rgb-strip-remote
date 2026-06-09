@@ -7,6 +7,20 @@ It replaces the *BanlanX* Android app — no phone needed, nothing to install.
 Everything is a **single file** (`index.html`). It talks to the strip directly over
 **Web Bluetooth**. No server, no account, no internet — your data never leaves the machine.
 
+## 🧭 Two ways to run it
+
+| | **A. Browser (Web Bluetooth)** | **B. ESP32 hub** |
+|---|---|---|
+| Where the Bluetooth happens | In your browser | On an ESP32 board |
+| Works on | Chrome / Edge / Brave (desktop + Android) | **Any** browser, **incl. Safari & iPhone** |
+| Needs | Just the browser | A ~$5 ESP32 board (one-time flash) |
+| Best for | Quick control from a laptop | An always-on hub / phones that aren't Chrome |
+| Setup | Open the link below | See **[esp32/README.md](esp32/README.md)** |
+
+Option A is documented below. Option B lives in **[`esp32/`](esp32/)** — the ESP32 connects
+to the strips over Bluetooth and serves the same control page over WiFi, so any phone or
+laptop on the network can drive the lights.
+
 ---
 
 ## ✨ What it can do
@@ -126,8 +140,9 @@ Prefer files? It’s just files in this folder — send the **whole folder** (or
 
 ```
 banlanx/
-├── index.html      ← the entire app
+├── index.html      ← the entire browser app (Option A)
 ├── serve.command   ← optional double-click launcher (see below)
+├── esp32/          ← Option B: ESP32 hub firmware (works on any browser, incl. iPhone)
 └── README.md       ← this file
 ```
 
