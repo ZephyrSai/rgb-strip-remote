@@ -181,12 +181,12 @@
 
     <div class="row" style="margin-top:16px">
       <label class="field" style="flex:1; min-width:150px">
-        <span>Speed <span id="speedVal" class="val"></span></span>
-        <input type="range" id="speed" min="0" max="255" value="160" />
+        <span>Speed <span class="muted">(1–10)</span> <span id="speedVal" class="val"></span></span>
+        <input type="range" id="speed" min="1" max="10" value="5" />
       </label>
       <label class="field" style="flex:1; min-width:150px">
-        <span>Effect length <span id="lengthVal" class="val"></span> <span class="muted">(BanlanX)</span></span>
-        <input type="range" id="length" min="0" max="255" value="140" />
+        <span>Effect length <span class="muted">(1–150, BanlanX)</span> <span id="lengthVal" class="val"></span></span>
+        <input type="range" id="length" min="1" max="150" value="75" />
       </label>
     </div>
 
@@ -225,6 +225,8 @@
 <script>
 "use strict";
 
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+
 /* ------------------------------------------------------------------ *
  *  Protocol profiles
  *  Both BanlanX (SP6xxE) and SP110E expose the same GATT:
@@ -241,8 +243,8 @@ const PROFILES = {
     // A0 <cmd> <len> <data...>
     power:      on   => [0xA0, 0x62, 0x01, on ? 0x01 : 0x00],
     brightness: v    => [0xA0, 0x66, 0x01, v & 0xff],
-    speed:      v    => [0xA0, 0x67, 0x01, v & 0xff],
-    length:     v    => [0xA0, 0x68, 0x01, v & 0xff],
+    speed:      v    => [0xA0, 0x67, 0x01, clamp(v, 1, 10)],    // device only accepts 1..10
+    length:     v    => [0xA0, 0x68, 0x01, clamp(v, 1, 150)],   // device only accepts 1..150
     effect:     n    => [0xA0, 0x63, 0x01, n & 0xff],
     staticMode: ()   => [0xA0, 0x63, 0x01, 0xBE],            // "RGB control" / static color
     color:  (r,g,b,bri) => [0xA0, 0x69, 0x04, r & 0xff, g & 0xff, b & 0xff, bri & 0xff],
@@ -252,7 +254,7 @@ const PROFILES = {
     // <d1> <d2> <d3> <cmd>
     power:      on => on ? [0,0,0,0xAA] : [0,0,0,0xAB],
     brightness: v  => [v & 0xff, 0, 0, 0x2A],
-    speed:      v  => [v & 0xff, 0, 0, 0x03],
+    speed:      v  => [clamp(v / 10 * 255, 1, 255), 0, 0, 0x03],  // map 1..10 slider -> 0..255
     effect:     n  => [n & 0xff, 0, 0, 0x2C],
     length:     null,                                        // not supported -> skipped
     color:  (r,g,b) => [r & 0xff, g & 0xff, b & 0xff, 0x1E],
