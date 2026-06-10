@@ -126,7 +126,9 @@
       <label class="field" style="flex:1; min-width:220px">
         <span>Protocol for the next device you add</span>
         <select id="profile">
-          <option value="banlanx" selected>BanlanX app — SP6xxE (SP611E / SP617E / SP630E …)</option>
+          <option value="sp61x" selected>BanlanX SP61x/62x (SP611E / SP617E / SP620E / SP621E)</option>
+          <option value="sp63x">BanlanX SP63x/64x (SP630E / SP63xE / SP64xE — newer)</option>
+          <option value="sp613">BanlanX SP613/614 (SP613E / SP614E / SP623E / SP624E)</option>
           <option value="sp110e">SP110E / SP107E (older 4-byte protocol)</option>
         </select>
       </label>
@@ -175,9 +177,17 @@
       <div class="swatches" id="swatches" style="flex:1"></div>
     </div>
     <p class="muted" style="margin:2px 0 0">
-      Colours differ between strips? Each strip has its own <b>colour-order</b> dropdown in the
-      <b>Devices</b> list above (RGB / GRB / BGR …). Change the odd one out until they match.
+      Wrong colours or dead controls? Each strip in the <b>Devices</b> list has its own
+      <b>protocol</b>, <b>colour-order</b> (RGB/GRB/BGR…) and <b>RGB/RGBW</b> dropdowns — try
+      switching them until colours match. (See the troubleshooting note below.)
     </p>
+
+    <div class="row">
+      <label class="field" style="flex:1">
+        <span>White channel <span class="muted">(RGBW strips only)</span> <span id="whiteVal" class="val"></span></span>
+        <input type="range" id="white" min="0" max="255" value="0" />
+      </label>
+    </div>
 
     <div class="row" style="margin-top:16px">
       <label class="field" style="flex:1; min-width:150px">
@@ -226,6 +236,8 @@
 "use strict";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+// BanlanX SP63x/64x frame:  53 <cmd> 00 01 00 <len> <data...>
+const f6 = (cmd, data) => [0x53, cmd & 0xff, 0x00, 0x01, 0x00, data.length & 0xff, ...data];
 
 /* ------------------------------------------------------------------ *
  *  Protocol profiles
@@ -238,33 +250,60 @@ const SERVICE    = "0000ffe0-0000-1000-8000-00805f9b34fb";
 const CHAR       = "0000ffe1-0000-1000-8000-00805f9b34fb";
 const VENDOR_SVC = "5833ff01-9b8b-5191-6142-22a4536ef123"; // SP6xxE vendor service (declared so Web BT can see it)
 
+/* Uniform interface per profile:
+ *   power(on)            -> bytes
+ *   brightness(v)        -> bytes               (0..255)
+ *   speed(v)             -> bytes               (v is 1..10 from the slider)
+ *   length(v) | null     -> bytes               (1..150) or null if unsupported
+ *   effect(code)         -> bytes
+ *   colorCmds(r,g,b,lvl) -> [bytes, ...]        full sequence to show a solid colour
+ *   white(w) | null      -> bytes               RGBW white channel, or null
+ */
 const PROFILES = {
-  banlanx: {
-    // A0 <cmd> <len> <data...>
-    power:      on   => [0xA0, 0x62, 0x01, on ? 0x01 : 0x00],
-    brightness: v    => [0xA0, 0x66, 0x01, v & 0xff],
-    speed:      v    => [0xA0, 0x67, 0x01, clamp(v, 1, 10)],    // device only accepts 1..10
-    length:     v    => [0xA0, 0x68, 0x01, clamp(v, 1, 150)],   // device only accepts 1..150
-    effect:     n    => [0xA0, 0x63, 0x01, n & 0xff],
-    staticMode: ()   => [0xA0, 0x63, 0x01, 0xBE],            // "RGB control" / static color
-    color:  (r,g,b,bri) => [0xA0, 0x69, 0x04, r & 0xff, g & 0xff, b & 0xff, bri & 0xff],
-    hasStatic: true,
+  // SP611E / SP617E / SP620E / SP621E  — "A0" protocol (uniled banlanx2)
+  sp61x: {
+    power:      on => [0xA0, 0x62, 0x01, on ? 0x01 : 0x00],
+    brightness: v  => [0xA0, 0x66, 0x01, v & 0xff],
+    speed:      v  => [0xA0, 0x67, 0x01, clamp(v, 1, 10)],
+    length:     v  => [0xA0, 0x68, 0x01, clamp(v, 1, 150)],
+    effect:     c  => [0xA0, 0x63, 0x01, c & 0xff],
+    colorCmds:  (r,g,b,l) => [[0xA0,0x63,0x01,0xBE], [0xA0,0x69,0x04, r&0xff,g&0xff,b&0xff, l&0xff]],
+    white:      w  => [0xA0, 0x76, 0x02, w & 0xff, 0x00],
   },
+  // SP630E / SP63xE / SP64xE  — "0x53" protocol (uniled banlanx_6xx)
+  sp63x: {
+    power:      on => f6(0x50, [on ? 0x01 : 0x00]),
+    brightness: v  => f6(0x51, [0x00, v & 0xff]),                 // which=0 (colour)
+    speed:      v  => f6(0x54, [clamp(v, 1, 10)]),
+    length:     v  => f6(0x55, [clamp(v, 1, 150)]),
+    effect:     c  => f6(0x53, [0x03, c & 0xff]),                 // mode 3 = dynamic colour
+    colorCmds:  (r,g,b,l) => [ f6(0x53,[0x01,0x01]), f6(0x52,[r&0xff,g&0xff,b&0xff, l&0xff]) ], // static solid, then colour
+    white:      w  => f6(0x51, [0x01, w & 0xff]),
+  },
+  // SP613E / SP614E / SP623E / SP624E  — short-frame protocol (uniled banlanx3)
+  sp613: {
+    power:      on => [0x0F, 0x01, on ? 0x01 : 0x00],
+    brightness: v  => [0x12, 0x01, v & 0xff],
+    speed:      v  => [0x14, 0x01, clamp(v, 1, 10)],
+    length:     null,
+    effect:     c  => [0x15, 0x01, c & 0xff],
+    colorCmds:  (r,g,b,l) => [[0x15,0x01,0x63], [0x13,0x04, r&0xff,g&0xff,b&0xff, l&0xff]],  // 0x63 = solid
+    white:      w  => [0x21, 0x02, w & 0xff, 0xFF],
+  },
+  // SP110E / SP107E  — older 4-byte protocol
   sp110e: {
-    // <d1> <d2> <d3> <cmd>
     power:      on => on ? [0,0,0,0xAA] : [0,0,0,0xAB],
     brightness: v  => [v & 0xff, 0, 0, 0x2A],
     speed:      v  => [clamp(v / 10 * 255, 1, 255), 0, 0, 0x03],  // map 1..10 slider -> 0..255
-    effect:     n  => [n & 0xff, 0, 0, 0x2C],
-    length:     null,                                        // not supported -> skipped
-    color:  (r,g,b) => [r & 0xff, g & 0xff, b & 0xff, 0x1E],
-    hasStatic: false,
+    length:     null,
+    effect:     c  => [c & 0xff, 0, 0, 0x2C],
+    colorCmds:  (r,g,b) => [[r&0xff, g&0xff, b&0xff, 0x1E]],
+    white:      null,
   },
 };
 
 // Named effects for the BanlanX SP6xxE controllers (effect byte for A0 63 01 xx)
 const EFFECTS = [
-  ["Static color", 0xBE],
   ["Rainbow", 0x01],
   ["Rainbow meteor", 0x02],
   ["Rainbow stars", 0x03],
@@ -283,7 +322,12 @@ const EFFECTS = [
 ];
 
 const SWATCHES = ["#ff0000","#ff7a00","#ffd400","#34ff00","#00ffd0","#0066ff","#7a00ff","#ff00c8","#ffffff"];
-const PROTO_NAMES = { banlanx: "BanlanX SP6xxE", sp110e: "SP110E / SP107E" };
+const PROTO_NAMES = {
+  sp61x:  "BanlanX SP61x/62x",
+  sp63x:  "BanlanX SP63x/64x",
+  sp613:  "BanlanX SP613/614",
+  sp110e: "SP110E / SP107E",
+};
 const ORDERS = ["rgb","grb","bgr","rbg","gbr","brg"];   // per-device colour channel order
 const DEFAULT_ORDER = "rgb";
 
@@ -371,15 +415,14 @@ const cmd = {
   bri:    (v, quiet) => broadcast(`Brightness ${v}`, p => p.brightness(v), quiet),
   speed:  (v, quiet) => broadcast(`Speed ${v}`, p => p.speed(v), quiet),
   length: (v, quiet) => broadcast(`Length ${v}`, p => p.length ? p.length(v) : null, quiet),
+  white:  (v, quiet) => broadcast(`White ${v}`, (p, entry) => (entry.rgbw && p.white) ? p.white(v) : null, quiet),
   color:  () => {
     const hexv = $("color").value;
     const [r,g,b] = hexToRgb(hexv);
     const bri = Number($("brightness").value);
     broadcast(`Color ${hexv}`, (p, entry) => {
       const [o1,o2,o3] = orderRgb(r, g, b, entry.colorOrder);   // each strip uses its own order
-      return p.hasStatic
-        ? [p.staticMode(), p.color(o1,o2,o3,bri)]
-        : [p.color(o1,o2,o3)];
+      return p.colorCmds(o1, o2, o3, bri);
     });
   },
 };
@@ -421,6 +464,7 @@ async function addDevice() {
       name: dev.name || "device",
       profileKey: $("profile").value,
       colorOrder: DEFAULT_ORDER,
+      rgbw: false,
       sync: true,
       writeChain: Promise.resolve(),
     };
@@ -491,6 +535,15 @@ function renderDevices() {
     });
     ord.onchange = () => { entry.colorOrder = ord.value; log(`${entry.name} colour order → ${ord.value.toUpperCase()}`); cmd.color(); };
 
+    const chan = document.createElement("select"); chan.className = "devproto"; chan.title = "Colour channels — RGBW if this strip has a separate white channel";
+    [["rgb","RGB"],["rgbw","RGBW"]].forEach(([v,t]) => {
+      const op = document.createElement("option");
+      op.value = v; op.textContent = t;
+      if ((v === "rgbw") === entry.rgbw) op.selected = true;
+      chan.appendChild(op);
+    });
+    chan.onchange = () => { entry.rgbw = (chan.value === "rgbw"); log(`${entry.name} channels → ${chan.value.toUpperCase()}`); };
+
     const syncL = document.createElement("label"); syncL.className = "synced muted";
     const syncC = document.createElement("input"); syncC.type = "checkbox"; syncC.checked = entry.sync;
     syncC.onchange = () => { entry.sync = syncC.checked; };
@@ -502,7 +555,7 @@ function renderDevices() {
       catch (_) { onDevDisconnected(entry.device.id); }
     };
 
-    row.append(dot, name, proto, ord, syncL, x);
+    row.append(dot, name, proto, ord, chan, syncL, x);
     box.appendChild(row);
   });
   updateConnState();
@@ -549,7 +602,7 @@ window.addEventListener("DOMContentLoaded", () => {
   renderDevices();
 
   // slider labels
-  [["brightness","briVal"],["speed","speedVal"],["length","lengthVal"]]
+  [["brightness","briVal"],["speed","speedVal"],["length","lengthVal"],["white","whiteVal"]]
     .forEach(([s,l]) => { $(l).textContent = $(s).value; });
 
   $("connect").onclick = addDevice;
@@ -562,6 +615,10 @@ window.addEventListener("DOMContentLoaded", () => {
   const briSend = throttled(v => cmd.bri(v, true));
   $("brightness").oninput  = e => { $("briVal").textContent = e.target.value; briSend(Number(e.target.value)); };
   $("brightness").onchange = e => cmd.bri(Number(e.target.value));
+
+  const whiteSend = throttled(v => cmd.white(v, true));
+  $("white").oninput  = e => { $("whiteVal").textContent = e.target.value; whiteSend(Number(e.target.value)); };
+  $("white").onchange = e => cmd.white(Number(e.target.value));
 
   const speedSend = throttled(v => cmd.speed(v, true));
   $("speed").oninput  = e => { $("speedVal").textContent = e.target.value; speedSend(Number(e.target.value)); };

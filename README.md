@@ -39,17 +39,26 @@ laptop on the network can drive the lights.
 - **Advanced:** send raw hex commands (for testing captured commands)
 - A live **log** of every command sent
 
-It supports **two protocols**. Pick the one for the device you're about to add in the
-dropdown; after it's connected you can also change it per-device from the row's own selector:
+BanlanX ships **several incompatible protocols** depending on the model, so the app lets you
+pick one **per strip** (in the Devices list) and switch freely until it works — no reconnect
+needed. Pick the default for new devices in the dropdown:
 
-| Protocol option | Use it if… | Devices |
-|---|---|---|
-| **BanlanX — SP6xxE** *(default)* | You use the app literally called **“BanlanX”** | SP611E, SP617E, SP621E, SP628E, SP630E … |
-| **SP110E / SP107E** | You use the older *SP110E* / *LED Hue* style app | SP110E, SP107E, SP105E … |
+| Protocol option | Models |
+|---|---|
+| **BanlanX SP61x/62x** *(default)* | SP611E, SP617E, SP620E, SP621E |
+| **BanlanX SP63x/64x** | SP630E, SP631E–SP639E, SP641E–SP649E (newer) |
+| **BanlanX SP613/614** | SP613E, SP614E, SP623E, SP624E |
+| **SP110E / SP107E** | SP110E, SP107E, SP105E |
 
-Both use the same Bluetooth service, so if a strip doesn’t respond, just switch its
-protocol selector and try the other — no reconnect needed. You can even mix strips of
-different types in the same sync group.
+**If colours look wrong or speed/effects do nothing, you're probably on the wrong protocol
+for that strip** — change its **Protocol** dropdown and retry. Each strip also has a
+**colour-order** (RGB/GRB/BGR…) and an **RGB/RGBW** dropdown (set RGBW if your strip has a
+separate white wire, then use the **White channel** slider). You can mix different strips in
+one sync group.
+
+> **Speed is 1–10** and **effect length is 1–150** — these are the only values BanlanX
+> controllers accept (sending anything larger is silently ignored, which is why speed used to
+> appear broken).
 
 ---
 
@@ -175,8 +184,10 @@ If **Connect** does nothing or errors, serve it over `localhost` instead:
 |---|---|
 | “This browser doesn’t support Web Bluetooth” banner | You’re in Safari/Firefox. Use Chrome/Edge/Brave. |
 | Device doesn’t appear in the picker | Close the phone app first; tick **Show all BLE devices**; make sure the strip is powered. |
-| Connects, but nothing happens | Wrong protocol — switch the dropdown (BanlanX ⇄ SP110E) and retry a button. |
-| Colors are swapped | Change **Color order** (try `GRB`). |
+| Connects, but nothing/garbled happens | Wrong **protocol** for that strip — switch its Protocol dropdown (SP61x/62x → SP63x/64x → SP613/614) and retry. |
+| Colours wrong vs the official app | Try a different **colour-order** (GRB is common). If it's an RGBW strip, set **RGBW** and check the **White channel** slider isn't washing it out. |
+| Colours differ *between* strips | Set each strip's **colour-order** until they match. |
+| Effect **speed**/length does nothing | Fixed — speed is 1–10, length 1–150. If still nothing, the strip is on the wrong protocol (see above). |
 | Sliders feel laggy / drop commands | Normal for BLE; the app queues writes. Move sliders a bit slower. |
 | Disconnects randomly | Keep the Mac near the strip; some clones have weak radios. Just click **Connect** again. |
 | Buttons do nothing on macOS | Allow Bluetooth for your browser in **System Settings → Privacy & Security → Bluetooth**. |
