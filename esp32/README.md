@@ -12,8 +12,11 @@ Safari and iPhones/iPads**.
  ESP32 version:    [any browser]  --WiFi--> [ESP32] --BLE--> [strips]   (works on iPhone too)
 ```
 
-It keeps the same features: power, brightness, color (+ color-order fix), effects, speed,
-effect length, raw hex — and every command is sent to **all connected strips at once**.
+It keeps the same features as the browser app: power, brightness, color, effects, speed
+(1–10), effect length (1–150), raw hex — and every command is sent to **all connected strips
+at once**. Each strip's **protocol** (SP61x/62x · SP63x/64x · SP613/614 · SP110E),
+**colour-order** and **RGB/RGBW** (with a White-channel slider) are all selectable **live from
+the web page**, so you can dial in any controller without re-flashing.
 
 ---
 
@@ -55,12 +58,17 @@ This is the only file you normally edit.
 
 2. **Your strips** — one line per strip in the `STRIPS[] = { ... }` list:
    ```c
-   { "SP", "", "banlanx" },                  // match first device named "SP..."
-   { "",   "a4:c1:38:aa:bb:cc", "sp110e" },  // OR match an exact MAC, SP110E protocol
+   { "SP", "", "sp61x" },                  // match first device named "SP..."
+   { "",   "a4:c1:38:aa:bb:cc", "sp110e" },// OR match an exact MAC
    ```
    - `name` = advertised-name prefix, **or** `addr` = exact MAC (more reliable for multiple
      identical strips). Use one or the other.
-   - `profile` = `"banlanx"` (SP6xxE / the BanlanX app) or `"sp110e"` (SP110E/SP107E).
+   - `profile` = the **starting** protocol — `"sp61x"`, `"sp63x"`, `"sp613"`, or `"sp110e"`.
+
+   > **You don't have to get the protocol right in `config.h`.** Each strip's **protocol**,
+   > **colour-order** and **RGB/RGBW** can be changed **live from the web page** (dropdowns on
+   > each strip) — just flip them until colours and effect-speed work. `config.h` only sets the
+   > starting values. (If unsure, start with `"sp61x"`.)
 
    > **Tip — finding the MAC:** upload first with a name match, open **Serial Monitor**
    > (115200 baud); the firmware prints the name + MAC of each strip it connects to. Copy
